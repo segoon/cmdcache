@@ -11,59 +11,53 @@ import time
 
 import pyfscache
 
+class hash_set:
+    def __init__(self):
+        self.data = ''
 
-input_data = ''
-def do_hash(s):
-    h = hashlib.md5()
-    h.update(s)
-    return base64.b64encode(h.digest())
+    def do_hash(self, s):
+        h = hashlib.md5()
+        h.update(s)
+        return base64.b64encode(h.digest())
 
-def hash_key(key, value):
-    global input_data
-    input_data = input_data + do_hash(key + '=' + do_hash(value))
+    def hash_key(self, key, value):
+        self.data = self.data + self.do_hash(key + '=' + self.do_hash(value))
 
-def hash_argv(argv):
-    global input_data
+    def hash_argv(self, argv):
+        h = ''.join(map(self.do_hash, argv))
+        self.hash_key('argv', h)
 
-    hash_arg = 'argv='
-    for arg in argv:
-        hash_arg = hash_arg + do_hash(arg)
-    input_data = input_data + do_hash(hash_arg)
+    def hash_environment(self, option, opt, value, parser):
+        # Separate missing and zero values
+        if value in os.environ and os.environ[value]:
+            hash_arg = value + '=' + self.do_hash(os.environ[value])
+        else:
+            hash_arg = value
+        self.hash_key('env', hash_arg)
 
-def hash_environment(option, opt, value, parser):
-    global input_data
+    def hash_file_contents(self, option, opt, value, parser):
+        # FIXME: handle IOError
+        contents = open(value).read()
+        hash_arg = value + '=' + self.do_hash(contents)
+        self.hash_key('file', hash_arg)
 
-    # Separate missing and zero values
-    if value in os.environ and os.environ[value]:
-        hash_arg = 'env=' + value + '=' + os.environ[value]
-    else:
-        hash_arg = 'env=' + value
-    input_data = input_data + do_hash(hash_arg)
-
-def hash_file_contents(option, opt, value, parser):
-    global input_data
-
-    fname = value
-    # FIXME: handle IOError
-    contents = open(fname).read()
-    hash_arg = 'file=' + fname + '=' + do_hash(contents)
-    input_data = input_data + do_hash(hash_arg)
-
+hs = hash_set()
 
 parser = optparse.OptionParser()
-parser.add_option('-e', '--environment', action='callback', callback=hash_environment, type='str')
-parser.add_option('-f', '--file-contents', action='callback', callback=hash_file_contents, type='str')
+parser.add_option('-e', '--environment', action='callback', callback=hs.hash_environment, type='str')
+parser.add_option('-f', '--file-contents', action='callback', callback=hs.hash_file_contents, type='str')
 (options, args) = parser.parse_args()
 cmd_argv = args
 
-hash_argv(cmd_argv)
+hs.hash_argv(cmd_argv)
 
 inp = sys.stdin.read()
-input_data = input_data + do_hash('stdin=' + inp)
+hs.hash_key('stdin', inp)
 
 cache = pyfscache.FSCache('cache/', days=10)
+print('hash = {}'.format(hs.data))
 try:
-    result = cache[input_data]
+    result = cache[hs.data]
     print('From cache')
     sys.stdout.write(result)
 except KeyError:
@@ -77,4 +71,4 @@ except KeyError:
         # use another subprocess 'tail -f'
         output_data = f.read()
     # FIXME: pyfscache doesn't handle MT races
-    cache[input_data] = output_data
+    cache[hs.data] = output_data
