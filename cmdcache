@@ -18,15 +18,27 @@ def do_hash(s):
     h.update(s)
     return base64.b64encode(h.digest())
 
+def hash_key(key, value):
+    global input_data
+    input_data = input_data + do_hash(key + '=' + do_hash(value))
+
+def hash_argv(argv):
+    global input_data
+
+    hash_arg = 'argv='
+    for arg in argv:
+        hash_arg = hash_arg + do_hash(arg)
+    input_data = input_data + do_hash(hash_arg)
+
 def hash_environment(option, opt, value, parser):
     global input_data
 
+    # Separate missing and zero values
     if value in os.environ and os.environ[value]:
         hash_arg = 'env=' + value + '=' + os.environ[value]
     else:
         hash_arg = 'env=' + value
-    h = do_hash(hash_arg)
-    input_data = input_data + h
+    input_data = input_data + do_hash(hash_arg)
 
 def hash_file_contents(option, opt, value, parser):
     global input_data
@@ -35,10 +47,8 @@ def hash_file_contents(option, opt, value, parser):
     # FIXME: handle IOError
     contents = open(fname).read()
     hash_arg = 'file=' + fname + '=' + do_hash(contents)
-    h = do_hash(hash_arg)
-    input_data = input_data + h
+    input_data = input_data + do_hash(hash_arg)
 
-cache = pyfscache.FSCache('cache/', days=10)
 
 parser = optparse.OptionParser()
 parser.add_option('-e', '--environment', action='callback', callback=hash_environment, type='str')
@@ -46,22 +56,25 @@ parser.add_option('-f', '--file-contents', action='callback', callback=hash_file
 (options, args) = parser.parse_args()
 cmd_argv = args
 
-# FIXME: argv hashing
-input_data = input_data + do_hash('argv=' + str(cmd_argv))
+hash_argv(cmd_argv)
 
 inp = sys.stdin.read()
 input_data = input_data + do_hash('stdin=' + inp)
 
+cache = pyfscache.FSCache('cache/', days=10)
 try:
     result = cache[input_data]
+    print('From cache')
     sys.stdout.write(result)
 except KeyError:
     tmp = tempfile.NamedTemporaryFile(delete=True)
     cmd_proc = subprocess.Popen(cmd_argv, stdout=tmp)
-    #cat_proc = subprocess.Popen(['/usr/bin/tail', '-f', '-n', '+1'], stdin=tmp)
+    cat_proc = subprocess.Popen(['/usr/bin/tail', '-f', tmp.name])
 
-    cmd_proc.wait()
     with open(tmp.name) as f:
+        cmd_proc.wait()
+        # FIXME: immediately output stdout, do not wait for cmd_proc exit
+        # use another subprocess 'tail -f'
         output_data = f.read()
-    sys.stdout.write(output_data)
+    # FIXME: pyfscache doesn't handle MT races
     cache[input_data] = output_data
