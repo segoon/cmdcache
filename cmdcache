@@ -74,7 +74,12 @@ try:
     sys.stdout.write(result)
 except KeyError:
     tmp = tempfile.NamedTemporaryFile(delete=True)
-    cmd_proc = subprocess.Popen(cmd_argv, stdout=tmp)
+    try:
+        cmd_proc = subprocess.Popen(cmd_argv, stdout=tmp)
+    except OSError as e:
+        print "popen: {}: {}".format(cmd_argv[0], e.strerror)
+        sys.exit(1)
+
     cat_proc = subprocess.Popen(['/usr/bin/tail', '-f', tmp.name])
 
     with open(tmp.name) as f:
