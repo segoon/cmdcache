@@ -55,6 +55,9 @@ parser.add_option('--cache-dir', dest='cache_dir',
         default=os.path.expanduser('~/.cmdcache/'))
 parser.add_option('-v', '--verbose', action='store_true', dest='verbose')
 (options, cmd_argv) = parser.parse_args()
+if len(cmd_argv) == 0:
+    parser.print_help()
+    sys.exit(1)
 
 hs.hash_argv(cmd_argv)
 
