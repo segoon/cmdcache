@@ -46,14 +46,36 @@ class hash_set:
 
 hs = hash_set()
 
-parser = optparse.OptionParser()
+
+class MyParser(optparse.OptionParser):
+    def format_epilog(self, formatter):
+        return self.epilog
+
+epilog = '''
+cmdcache executes a program and caches its output.
+It is assumed that there are no side effects of the program execution
+and the data written to stdout depends strictly on the known data.
+This data includes: stdin contents, program name, program arguments,
+environment variables (only if -e option is given), files contents
+(only if -f option is given).
+
+Examples:
+
+    cmdcache -f file -- egrep REGEXP file
+    cmdcache -e PATH -- which id
+'''
+parser = MyParser(epilog=epilog)
 parser.add_option('-e', '--environment', action='callback',
-        callback=hs.hash_environment, type='str')
+        callback=hs.hash_environment, type='str',
+        help='indicate that output depends on the environment variable value (and presence)')
 parser.add_option('-f', '--file-contents', action='callback',
-        callback=hs.hash_file_contents, type='str')
+        callback=hs.hash_file_contents, type='str',
+        help='indicate that output depends on the file contents')
 parser.add_option('--cache-dir', dest='cache_dir',
-        default=os.path.expanduser('~/.cmdcache/'))
-parser.add_option('-v', '--verbose', action='store_true', dest='verbose')
+        default=os.path.expanduser('~/.cmdcache/'),
+        help='specify cache directory (~/.cmdcache/ by default)')
+parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
+        help='Be verbose and print debug messages')
 (options, cmd_argv) = parser.parse_args()
 if len(cmd_argv) == 0:
     parser.print_help()
