@@ -22,7 +22,6 @@ class hash_set:
 
     def hash_key(self, key, value):
         self.data = self.data + self.do_hash(key + '=' + self.do_hash(value))
-        #self.data = self.data + '\n' + key + '=' + self.do_hash(value)
 
     def hash_argv(self, argv):
         h = ''.join(map(self.do_hash, argv))
@@ -55,8 +54,7 @@ parser.add_option('-f', '--file-contents', action='callback',
 parser.add_option('--cache-dir', dest='cache_dir',
         default=os.path.expanduser('~/.cmdcache/'))
 parser.add_option('-v', '--verbose', action='store_true', dest='verbose')
-(options, args) = parser.parse_args()
-cmd_argv = args
+(options, cmd_argv) = parser.parse_args()
 
 hs.hash_argv(cmd_argv)
 
