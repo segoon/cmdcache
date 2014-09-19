@@ -1,0 +1,67 @@
+#!/usr/bin/python
+
+import sys
+import os
+import optparse
+import tempfile
+import hashlib
+import base64
+import subprocess
+import time
+
+import pyfscache
+
+
+input_data = ''
+def do_hash(s):
+    h = hashlib.md5()
+    h.update(s)
+    return base64.b64encode(h.digest())
+
+def hash_environment(option, opt, value, parser):
+    global input_data
+
+    if value in os.environ and os.environ[value]:
+        hash_arg = 'env=' + value + '=' + os.environ[value]
+    else:
+        hash_arg = 'env=' + value
+    h = do_hash(hash_arg)
+    input_data = input_data + h
+
+def hash_file_contents(option, opt, value, parser):
+    global input_data
+
+    fname = value
+    # FIXME: handle IOError
+    contents = open(fname).read()
+    hash_arg = 'file=' + fname + '=' + do_hash(contents)
+    h = do_hash(hash_arg)
+    input_data = input_data + h
+
+cache = pyfscache.FSCache('cache/', days=10)
+
+parser = optparse.OptionParser()
+parser.add_option('-e', '--environment', action='callback', callback=hash_environment, type='str')
+parser.add_option('-f', '--file-contents', action='callback', callback=hash_file_contents, type='str')
+(options, args) = parser.parse_args()
+cmd_argv = args
+
+# FIXME: argv hashing
+input_data = input_data + do_hash('argv=' + str(cmd_argv))
+
+inp = sys.stdin.read()
+input_data = input_data + do_hash('stdin=' + inp)
+
+try:
+    result = cache[input_data]
+    sys.stdout.write(result)
+except KeyError:
+    tmp = tempfile.NamedTemporaryFile(delete=True)
+    cmd_proc = subprocess.Popen(cmd_argv, stdout=tmp)
+    #cat_proc = subprocess.Popen(['/usr/bin/tail', '-f', '-n', '+1'], stdin=tmp)
+
+    cmd_proc.wait()
+    with open(tmp.name) as f:
+        output_data = f.read()
+    sys.stdout.write(output_data)
+    cache[input_data] = output_data
