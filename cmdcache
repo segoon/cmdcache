@@ -22,6 +22,7 @@ class hash_set:
 
     def hash_key(self, key, value):
         self.data = self.data + self.do_hash(key + '=' + self.do_hash(value))
+        #self.data = self.data + '\n' + key + '=' + self.do_hash(value)
 
     def hash_argv(self, argv):
         h = ''.join(map(self.do_hash, argv))
@@ -36,16 +37,24 @@ class hash_set:
         self.hash_key('env', hash_arg)
 
     def hash_file_contents(self, option, opt, value, parser):
-        # FIXME: handle IOError
-        contents = open(value).read()
+        try:
+            contents = open(value).read()
+        except IOError as e:
+            print "open: {} (errno={}): {}".format(value, e.errno, e.strerror)
+            sys.exit(1)
         hash_arg = value + '=' + self.do_hash(contents)
         self.hash_key('file', hash_arg)
 
 hs = hash_set()
 
 parser = optparse.OptionParser()
-parser.add_option('-e', '--environment', action='callback', callback=hs.hash_environment, type='str')
-parser.add_option('-f', '--file-contents', action='callback', callback=hs.hash_file_contents, type='str')
+parser.add_option('-e', '--environment', action='callback',
+        callback=hs.hash_environment, type='str')
+parser.add_option('-f', '--file-contents', action='callback',
+        callback=hs.hash_file_contents, type='str')
+parser.add_option('--cache-dir', dest='cache_dir',
+        default=os.path.expanduser('~/.cmdcache/'))
+parser.add_option('-v', '--verbose', action='store_true', dest='verbose')
 (options, args) = parser.parse_args()
 cmd_argv = args
 
@@ -54,11 +63,13 @@ hs.hash_argv(cmd_argv)
 inp = sys.stdin.read()
 hs.hash_key('stdin', inp)
 
-cache = pyfscache.FSCache('cache/', days=10)
-print('hash = {}'.format(hs.data))
+cache = pyfscache.FSCache(options.cache_dir, days=10)
+if options.verbose == True:
+    sys.stderr.write('Hash = {}\n'.format(hs.data))
 try:
     result = cache[hs.data]
-    print('From cache')
+    if options.verbose == True:
+        sys.stderr.write('Found in cache\n')
     sys.stdout.write(result)
 except KeyError:
     tmp = tempfile.NamedTemporaryFile(delete=True)
@@ -67,8 +78,6 @@ except KeyError:
 
     with open(tmp.name) as f:
         cmd_proc.wait()
-        # FIXME: immediately output stdout, do not wait for cmd_proc exit
-        # use another subprocess 'tail -f'
         output_data = f.read()
     # FIXME: pyfscache doesn't handle MT races
     cache[hs.data] = output_data
