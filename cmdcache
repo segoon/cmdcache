@@ -11,6 +11,11 @@ import time
 
 import pyfscache
 
+def error(args):
+    sys.stderr.write(args)
+    sys.stderr.flush()
+    sys.exit(1)
+
 class hash_set:
     def __init__(self):
         self.data = ''
@@ -39,8 +44,7 @@ class hash_set:
         try:
             contents = open(value).read()
         except IOError as e:
-            print "open: {} (errno={}): {}".format(value, e.errno, e.strerror)
-            sys.exit(1)
+            error("open: {}: {}\n".format(value, e.strerror))
         hash_arg = value + '=' + self.do_hash(contents)
         self.hash_key('file', hash_arg)
 
@@ -83,7 +87,8 @@ if len(cmd_argv) == 0:
 
 hs.hash_argv(cmd_argv)
 
-inp = sys.stdin.read()
+tmp_input = tempfile.NamedTemporaryFile(delete=True)
+inp = subprocess.check_output(['tee', tmp_input.name])
 hs.hash_key('stdin', inp)
 
 cache = pyfscache.FSCache(options.cache_dir, days=10)
@@ -95,17 +100,22 @@ try:
         sys.stderr.write('Found in cache\n')
     sys.stdout.write(result)
 except KeyError:
-    tmp = tempfile.NamedTemporaryFile(delete=True)
+    tmp_output = tempfile.NamedTemporaryFile(delete=True)
     try:
-        cmd_proc = subprocess.Popen(cmd_argv, stdout=tmp)
+        cmd_proc = subprocess.Popen(cmd_argv,
+                stdin=tmp_input, stdout=subprocess.PIPE)
+        tee_proc = subprocess.Popen(['tee', tmp_output.name],
+                stdin=cmd_proc.stdout)
+        cmd_proc.stdout.close() # tee_proc must be able to receive SIGPIPE
+
+        del tmp_input
+        tee_rc = tee_proc.wait()
+        cmd_rc = cmd_proc.wait()
+
     except OSError as e:
-        print "popen: {}: {}".format(cmd_argv[0], e.strerror)
-        sys.exit(1)
+        error("popen: {}: {}\n".format(cmd_argv[0], e.strerror))
 
-    cat_proc = subprocess.Popen(['/usr/bin/tail', '-f', tmp.name])
-
-    with open(tmp.name) as f:
-        cmd_proc.wait()
-        output_data = f.read()
+    # force reopen to avoid potential caching at open() time
+    output_data = open(tmp_output.name).read()
     # FIXME: pyfscache doesn't handle MT races
     cache[hs.data] = output_data
