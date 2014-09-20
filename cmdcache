@@ -78,6 +78,10 @@ class CacheOptParser(optparse.OptionParser):
     def format_epilog(self, formatter):
         return self.epilog
 
+def wait_rc_zero(proc, cmd_name):
+    rc = proc.wait()
+    if rc != 0:
+        error("{} exited with return code {}\n".format(cmd_name, rc)
 
 hs = HashSet()
 parser = CacheOptParser(hs)
@@ -106,7 +110,6 @@ try:
     result = cache[hs.data]
     pr_verbose('Found in cache\n')
     sys.stdout.write(result)
-    sys.exit(0)
 except KeyError:
     tmp_output = tempfile.NamedTemporaryFile(delete=True)
     try:
@@ -116,13 +119,9 @@ except KeyError:
                 stdin=cmd_proc.stdout)
         cmd_proc.stdout.close() # tee_proc must be able to receive SIGPIPE
 
-        del tmp_input
-        tee_rc = tee_proc.wait()
-        cmd_rc = cmd_proc.wait()
-        if tee_rc != 0:
-            error("tee exited with return code {}\n".format(tee_rc))
-        if cmd_rc != 0:
-            error("{} exited with return code {}\n".format(cmd_argv[0], cmd_rc))
+        del tmp_input # unlink() ASAP
+        wait_rc_zero(tee_proc, 'tee')
+        wait_rc_zero(cmd_proc, cmd_proc[0])
 
     except OSError as e:
         error("popen: {}: {}\n".format(cmd_argv[0], e.strerror))
