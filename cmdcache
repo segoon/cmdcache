@@ -7,7 +7,6 @@ import tempfile
 import hashlib
 import base64
 import subprocess
-import time
 
 import pyfscache
 
@@ -16,7 +15,7 @@ def error(args):
     sys.stderr.flush()
     sys.exit(1)
 
-class hash_set:
+class HashSet:
     def __init__(self):
         self.data = ''
 
@@ -48,57 +47,66 @@ class hash_set:
         hash_arg = value + '=' + self.do_hash(contents)
         self.hash_key('file', hash_arg)
 
-hs = hash_set()
+class CacheOptParser(optparse.OptionParser):
+    def __init__(self, hs):
+        epilog = '''
+        cmdcache executes a program and caches its output.
+        It is assumed that there are no side effects of the program execution
+        and the data written to stdout depends strictly on the known data.
+        This data includes: stdin contents, program name, program arguments,
+        environment variables (only if -e option is given), files contents
+        (only if -f option is given).
 
+        Examples:
 
-class MyParser(optparse.OptionParser):
+            cmdcache -f file -- egrep REGEXP file
+            cmdcache -e PATH -- which id
+        '''
+        optparse.OptionParser.__init__(self, epilog=epilog)
+        self.add_option('-e', '--environment', action='callback',
+                callback=hs.hash_environment, type='str',
+                help='indicate that output depends on the environment variable value (and presence)')
+        self.add_option('-f', '--file-contents', action='callback',
+                callback=hs.hash_file_contents, type='str',
+                help='indicate that output depends on the file contents')
+        self.add_option('--cache-dir', dest='cache_dir',
+                default=os.path.expanduser('~/.cmdcache/'),
+                help='specify cache directory (~/.cmdcache/ by default)')
+        self.add_option('-v', '--verbose', action='store_true', dest='verbose',
+                help='Be verbose and print debug messages')
+
     def format_epilog(self, formatter):
         return self.epilog
 
-epilog = '''
-cmdcache executes a program and caches its output.
-It is assumed that there are no side effects of the program execution
-and the data written to stdout depends strictly on the known data.
-This data includes: stdin contents, program name, program arguments,
-environment variables (only if -e option is given), files contents
-(only if -f option is given).
 
-Examples:
-
-    cmdcache -f file -- egrep REGEXP file
-    cmdcache -e PATH -- which id
-'''
-parser = MyParser(epilog=epilog)
-parser.add_option('-e', '--environment', action='callback',
-        callback=hs.hash_environment, type='str',
-        help='indicate that output depends on the environment variable value (and presence)')
-parser.add_option('-f', '--file-contents', action='callback',
-        callback=hs.hash_file_contents, type='str',
-        help='indicate that output depends on the file contents')
-parser.add_option('--cache-dir', dest='cache_dir',
-        default=os.path.expanduser('~/.cmdcache/'),
-        help='specify cache directory (~/.cmdcache/ by default)')
-parser.add_option('-v', '--verbose', action='store_true', dest='verbose',
-        help='Be verbose and print debug messages')
+hs = HashSet()
+parser = CacheOptParser(hs)
 (options, cmd_argv) = parser.parse_args()
 if len(cmd_argv) == 0:
     parser.print_help()
     sys.exit(1)
+
+if options.verbose == True:
+    def pr_verbose(arg):
+        sys.stderr.write(arg)
+else:
+    def pr_verbose(arg):
+        pass
+
 
 hs.hash_argv(cmd_argv)
 
 tmp_input = tempfile.NamedTemporaryFile(delete=True)
 inp = subprocess.check_output(['tee', tmp_input.name])
 hs.hash_key('stdin', inp)
+pr_verbose('argv+stdin hash = {}\n'.format(hs.data))
 
 cache = pyfscache.FSCache(options.cache_dir, days=10)
-if options.verbose == True:
-    sys.stderr.write('Hash = {}\n'.format(hs.data))
 try:
     result = cache[hs.data]
-    if options.verbose == True:
-        sys.stderr.write('Found in cache\n')
+    pr_verbose('Found in cache\n')
     sys.stdout.write(result)
+    sys.exit(0)
 except KeyError:
     tmp_output = tempfile.NamedTemporaryFile(delete=True)
     try:
