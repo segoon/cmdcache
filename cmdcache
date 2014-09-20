@@ -121,7 +121,7 @@ except KeyError:
 
         del tmp_input # unlink() ASAP
         wait_rc_zero(tee_proc, 'tee')
-        wait_rc_zero(cmd_proc, cmd_proc[0])
+        wait_rc_zero(cmd_proc, cmd_argv[0])
 
     except OSError as e:
         error("popen: {}: {}\n".format(cmd_argv[0], e.strerror))
