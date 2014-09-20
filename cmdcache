@@ -111,6 +111,10 @@ except KeyError:
         del tmp_input
         tee_rc = tee_proc.wait()
         cmd_rc = cmd_proc.wait()
+        if tee_rc != 0:
+            error("tee exited with return code {}\n".format(tee_rc))
+        if cmd_rc != 0:
+            error("{} exited with return code {}\n".format(cmd_argv[0], cmd_rc))
 
     except OSError as e:
         error("popen: {}: {}\n".format(cmd_argv[0], e.strerror))
