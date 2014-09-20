@@ -103,7 +103,7 @@ hs.hash_argv(cmd_argv)
 tmp_input = tempfile.NamedTemporaryFile(delete=True)
 inp = subprocess.check_output(['tee', tmp_input.name])
 hs.hash_key('stdin', inp)
-pr_verbose('argv+stdin hash = {}\n'.format(hs.data))
+pr_verbose('hash = {}\n'.format(hs.data))
 
 cache = pyfscache.FSCache(options.cache_dir, days=10)
 try:
