@@ -81,6 +81,11 @@ Examples:
                 If the path is relative to current directory
                 (i.e. begins with './') additionally hash $PWD.
                 Otherwise additionally hash output of 'which CMD'.''')
+        self.add_option('--no-stdin', action='store_true',
+                dest='no_stdin',
+                help='''Completely ignore stdin and don't hash its contents.
+                Can be usefull in case the executable doesn't read
+                anything from stdin.''')
 
     def format_epilog(self, formatter):
         return self.epilog
@@ -114,9 +119,12 @@ if options.check_relative_path and cmd_argv[0][0] != '/':
         pr_verbose('hash path={}\n'.format(full_path))
         hs.hash_key('exec', full_path)
 
-tmp_input = tempfile.NamedTemporaryFile(delete=True)
-inp = subprocess.check_output(['tee', tmp_input.name])
-hs.hash_key('stdin', inp)
+if not options.no_stdin:
+    tmp_input = tempfile.NamedTemporaryFile(delete=True)
+    inp = subprocess.check_output(['tee', tmp_input.name])
+    hs.hash_key('stdin', inp)
+else:
+    tmp_input = None
 pr_verbose('hash = {}\n'.format(hs.data))
 
 cache = pyfscache.FSCache(options.cache_dir, days=10)
@@ -133,7 +141,8 @@ except KeyError:
                 stdin=cmd_proc.stdout)
         cmd_proc.stdout.close() # tee_proc must be able to receive SIGPIPE
 
-        del tmp_input # unlink() ASAP
+        if tmp_input:
+            del tmp_input # unlink() ASAP
         wait_rc_zero(tee_proc, 'tee')
         wait_rc_zero(cmd_proc, cmd_argv[0])
 
