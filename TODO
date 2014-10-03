@@ -1,0 +1,5 @@
+- --prune-all: delete all cache items
+- --prune-item: for a single item deletion
+- --lifetime 5d: explicitly set cache lifetime
+- -q: identify whether the cache item exists
+- -u: force run program
