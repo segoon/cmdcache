@@ -132,6 +132,8 @@ try:
     result = cache[hs.data]
     pr_verbose('Found in cache\n')
     sys.stdout.write(result)
+    # Update expire time
+    cache.update_item(hs.data, result)
 except KeyError:
     tmp_output = tempfile.NamedTemporaryFile(delete=True)
     try:
