@@ -2,6 +2,7 @@
 
 import sys
 import os
+import re
 import optparse
 import tempfile
 import hashlib
@@ -72,15 +73,21 @@ Examples:
         self.add_option('--cache-dir', dest='cache_dir',
                 default=os.path.expanduser('~/.cmdcache/'),
                 help='specify cache directory (~/.cmdcache/ by default)')
+        self.add_option('--cache-lifetime', dest='cache_lifetime',
+                default='10Y',
+                help='''specify cache item lifetime (10 years by default)
+in the following format: 11Y22M33D44h55m66s.
+Any part can be skipped.  E.g. 1Y or 2h3s are valid cache lifetimes.
+''')
         self.add_option('-v', '--verbose', action='store_true', dest='verbose',
                 help='Be verbose and print debug messages')
         self.add_option('-r', '--check-relative-path', action='store_true',
                 dest='check_relative_path',
                 help='''Make additional check on the executable path if
-                it is not absolute.
-                If the path is relative to current directory
-                (i.e. begins with './') additionally hash $PWD.
-                Otherwise additionally hash output of 'which CMD'.''')
+it is not absolute.
+If the path is relative to current directory
+(i.e. begins with './') additionally hash $PWD.
+Otherwise additionally hash output of 'which CMD'.''')
         self.add_option('--no-stdin', action='store_true',
                 dest='no_stdin',
                 help='''Completely ignore stdin and don't hash its contents.
@@ -89,6 +96,27 @@ Examples:
 
     def format_epilog(self, formatter):
         return self.epilog
+
+def get_cache_lifetime(options):
+
+    # From http://stackoverflow.com/questions/4628122/how-to-construct-a-timedelta-object-from-a-simple-string/4628148#4628148
+
+    def parse_time(time_str):
+        regex = re.compile(r'^((?P<years>\d+?)Y)?((?P<months>\d+?)M)?((?P<weeks>\d+?)W)?((?P<days>\d+?)D)?((?P<hours>\d+?)h)?((?P<minutes>\d+?)m)?((?P<seconds>\d+?)s)?$')
+        parts = regex.match(time_str)
+        if not parts:
+            raise Exception("Invalid cache lifetime format.")
+
+        parts = parts.groupdict()
+        for p in [ 'years', 'months', 'weeks', 'days', 'hours', 'minutes', 'seconds']:
+            #sys.stderr.write("{} = {}\n".format(p, parts[p]))
+            if not parts[p]:
+                del parts[p]
+            else:
+                parts[p] = int(parts[p])
+
+        return parts
+    return parse_time(options.cache_lifetime)
 
 def wait_rc_zero(proc, cmd_name):
     rc = proc.wait()
@@ -127,7 +155,7 @@ else:
     tmp_input = None
 pr_verbose('hash = {}\n'.format(hs.data))
 
-cache = pyfscache.FSCache(options.cache_dir, days=10)
+cache = pyfscache.FSCache(options.cache_dir, **get_cache_lifetime(options))
 try:
     result = cache[hs.data]
     pr_verbose('Found in cache\n')
